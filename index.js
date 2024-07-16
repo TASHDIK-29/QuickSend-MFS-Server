@@ -146,6 +146,30 @@ async function run() {
 
 
 
+        app.get('/userRequest', verifyToken, async(req, res)=>{
+            const query={
+                type: 'User',
+                status: 'Pending'
+            }
+
+            const pendingUsers = await usersCollection.find(query).toArray();
+
+            res.send(pendingUsers);
+        })
+
+        app.get('/agentRequest', verifyToken, async(req, res)=>{
+            const query={
+                type: 'Agent',
+                status: 'Pending'
+            }
+
+            const pendingAgents = await usersCollection.find(query).toArray();
+
+            res.send(pendingAgents);
+        })
+
+
+
         // Protected route
         // app.get('/profile', (req, res) => {
         //     const token = req.headers['authorization'];
