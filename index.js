@@ -3,6 +3,7 @@ const cors = require('cors');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
+const jwt = require('jsonwebtoken');
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -40,7 +41,25 @@ async function run() {
 
         const usersCollection = client.db("QuickSend").collection("user");
 
+        const SECRET_KEY = 'your-secret-key';
 
+
+
+        // middleware
+        const verifyToken = (req, res, next) => {
+            // console.log('inside verify', req.headers.authorization);
+            if (!req.headers.authorization) {
+                return res.status(401).send({ message: 'Unauthorized access!' })
+            }
+            const token = req.headers.authorization.split(' ')[1];
+            jwt.verify(token, SECRET_KEY, (err, decoded) => {
+                if (err) {
+                    return res.status(401).send({ message: 'Unauthorized access!' })
+                }
+                req.decoded = decoded;
+                next();
+            })
+        }
 
 
         // save user data at DB
@@ -56,13 +75,15 @@ async function run() {
 
             const salt = await bcrypt.genSalt(10)
             const securePin = await bcrypt.hash(req.body.pin, salt)
-            
-            const userInfo ={
+
+            const userInfo = {
                 name: req.body.name,
                 email: req.body.email,
                 phone: req.body.phone,
                 type: req.body.type,
-                pin : securePin
+                pin: securePin,
+                status: 'Pending',
+                balance: 0
             }
             const result = await usersCollection.insertOne(userInfo);
 
@@ -70,47 +91,77 @@ async function run() {
         })
 
 
-        app.get('/login', async (req, res) =>{
-            const emailOrNumber = req.query.emailOrNumber;
-            const pin = req.query.pin;
+        app.post('/login', async (req, res) => {
+            const { emailOrNumber, pin } = req.body;
 
-            console.log('emailOrNumber and pin', emailOrNumber, pin);
+            // console.log('emailOrNumber and pin', emailOrNumber, pin);
 
             const query = {
                 $or: [
-                  { email: emailOrNumber },
-                  { phone: emailOrNumber }
+                    { email: emailOrNumber },
+                    { phone: emailOrNumber }
                 ]
-              };
+            };
 
-              const user = await usersCollection.findOne(query);
-
-            //   if (user) {
-            //     console.log('User exists:', user);
-            //     return res.send({user : true});
-            //   } else {
-            //     console.log('User does not exist');
-            //     return res.send({user : false});
-            //   }
+            const user = await usersCollection.findOne(query);
 
 
-              if (user) {
+            if (user) {
                 const isPinValid = await bcrypt.compare(pin, user.pin);
                 if (isPinValid) {
-                  console.log('User exists:', user);
-                  return res.send({user : true, pin : true, type: user.type});
+                    console.log('User exists:', user);
+
+                    const token = jwt.sign({ email: user.email }, SECRET_KEY, { expiresIn: '1h' });
+                    res.json({ token });
+
+
+                    // return res.send({ user: true, pin: true, type: user.type });
                 } else {
-                  console.log('Invalid pin');
-                  return res.send({user : true, pin : false});
+                    console.log('Invalid pin');
+                    return res.send({ user: true, pin: false });
                 }
-              } else {
+            } else {
                 console.log('User does not exist');
-                return res.send({user : false});
-              }
+                return res.send({ user: false });
+            }
 
 
-            
+
         })
+
+
+        app.get('/user', verifyToken, async (req, res) => {
+            const credential = req.query.credential;
+            const query = {
+                $or: [
+                    { email: credential },
+                    { phone: credential }
+                ]
+            };
+
+            const user = await usersCollection.findOne(query);
+
+            res.send(user);
+        })
+
+
+
+        // Protected route
+        // app.get('/profile', (req, res) => {
+        //     const token = req.headers['authorization'];
+        //     if (!token) return res.status(401).send('Access denied');
+
+        //     jwt.verify(token, SECRET_KEY, (err, decoded) => {
+        //         if (err) {
+        //             return res.status(401).send({ message: 'Unauthorized access!' })
+        //         }
+        //         req.decoded = decoded;
+        //         console.log('decoded =',req.decoded.email);
+        //         // next();
+        //         return res.send(req.decoded.email)
+        //     })
+        // });
+
 
 
 
