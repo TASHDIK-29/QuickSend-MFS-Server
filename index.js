@@ -157,6 +157,23 @@ async function run() {
             res.send(pendingUsers);
         })
 
+        app.patch('/userRequest', async(req, res) =>{
+            const email = req.query.email;
+
+            const filter = { email: email};
+
+            const updateDoc = {
+                $set: {
+                  status: `Activated`,
+                  balance: 40
+                },
+              };
+
+              const result = await usersCollection.updateOne(filter, updateDoc);
+
+              res.send(result);
+        })
+
         app.get('/agentRequest', verifyToken, async(req, res)=>{
             const query={
                 type: 'Agent',
@@ -167,6 +184,25 @@ async function run() {
 
             res.send(pendingAgents);
         })
+
+
+        app.patch('/agentRequest', async(req, res) =>{
+            const email = req.query.email;
+
+            const filter = { email: email};
+
+            const updateDoc = {
+                $set: {
+                  status: `Activated`,
+                  balance: 10000
+                },
+              };
+
+              const result = await usersCollection.updateOne(filter, updateDoc);
+
+              res.send(result);
+        })
+
 
 
 
