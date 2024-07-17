@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
@@ -41,6 +41,7 @@ async function run() {
 
         const usersCollection = client.db("QuickSend").collection("user");
         const usersTransactions = client.db("QuickSend").collection("usersTransactions");
+        const cashInRequests = client.db("QuickSend").collection("cashInRequests");
 
         const SECRET_KEY = 'your-secret-key';
 
@@ -275,7 +276,7 @@ async function run() {
                 senderNumber: transInfo.userNumber,
                 receiverNumber: transInfo.receiverNumber,
                 receiverName: receiver.name,
-                amount : transInfo.amount,
+                amount: transInfo.amount,
                 type: 'Send Money',
                 date: transInfo.date
             }
@@ -283,6 +284,106 @@ async function run() {
             const result = await usersTransactions.insertOne(transaction);
 
             res.send(result);
+        })
+
+
+        app.post('/cashInRequest', async (req, res) => {
+            const cashInfo = req.body;
+            console.log(cashInfo);
+
+
+            const query = {
+                phone: cashInfo.userNumber
+            };
+
+            const user = await usersCollection.findOne(query);
+
+            const isPinValid = await bcrypt.compare(cashInfo.pin, user.pin);
+
+            if (isPinValid) {
+                const query2 = {
+                    phone: cashInfo.agentNumber,
+                    type: 'Agent',
+                    status: 'Activated'
+                }
+                const isActivatedAgent = await usersCollection.findOne(query2);
+
+                if (isActivatedAgent) {
+                    const cashIn = {
+                        senderNumber: cashInfo.userNumber,
+                        agentNumber: cashInfo.agentNumber,
+                        amount: cashInfo.amount,
+                        date: new Date().toLocaleString()
+                    }
+
+                    const result = await cashInRequests.insertOne(cashIn);
+
+                    return res.send(result);
+                }
+                else {
+                    return res.send({ pin: true, agent: false })
+                }
+            }
+
+            res.send({ pin: false });
+
+        })
+
+        app.get('/cashInRequest', verifyToken, async (req, res) => {
+            const agentNumber = req.query.agentNumber;
+            console.log('agentNumber=', agentNumber);
+            const query = {
+                agentNumber: agentNumber
+            }
+
+            const requests = await cashInRequests.find(query).toArray();
+
+            res.send(requests);
+        })
+
+
+        app.patch('/cashInAccept', verifyToken, async (req, res) => {
+            const id = req.query.id;
+            console.log('id', id);
+
+            const filter = { _id: new ObjectId(id) };
+            const doc = await cashInRequests.findOne(filter);
+
+            const query1 = { phone: doc.agentNumber };
+            const agent = await usersCollection.findOne(query1);
+            const query2 = { phone: doc.senderNumber };
+            const sender = await usersCollection.findOne(query2);
+
+            if (agent.balance >= doc.amount) {
+
+                const updateDoc1 = {
+                    $set: {
+                        balance: agent.balance - doc.amount
+                    }
+                };
+
+                const updateDoc2 = {
+                    $set: {
+                        balance: sender.balance + doc.amount
+                    }
+                };
+
+                const result1 = await usersCollection.updateOne(query1, updateDoc1);
+                const result2 = await usersCollection.updateOne(query2, updateDoc2);
+
+                
+                const request = await cashInRequests.deleteOne(filter);
+
+
+                return res.send({result1, result2, request, balance: true});
+
+            }
+            else {
+                return res.send({ balance: false })
+            }
+
+            // res.send('okk')
+
         })
 
 
