@@ -371,11 +371,23 @@ async function run() {
                 const result1 = await usersCollection.updateOne(query1, updateDoc1);
                 const result2 = await usersCollection.updateOne(query2, updateDoc2);
 
-                
+
                 const request = await cashInRequests.deleteOne(filter);
 
 
-                return res.send({result1, result2, request, balance: true});
+                const transaction = {
+                    senderNumber: doc.senderNumber,
+                    receiverNumber: doc.agentNumber,
+                    receiverName: agent.name,
+                    amount: doc.amount,
+                    type: 'Cash In',
+                    date: new Date().toLocaleString()
+                }
+
+                const result = await usersTransactions.insertOne(transaction);
+
+
+                return res.send({ result1, result2, request, balance: true });
 
             }
             else {
