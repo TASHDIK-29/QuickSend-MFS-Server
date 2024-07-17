@@ -146,8 +146,8 @@ async function run() {
 
 
 
-        app.get('/userRequest', verifyToken, async(req, res)=>{
-            const query={
+        app.get('/userRequest', verifyToken, async (req, res) => {
+            const query = {
                 type: 'User',
                 status: 'Pending'
             }
@@ -157,25 +157,25 @@ async function run() {
             res.send(pendingUsers);
         })
 
-        app.patch('/userRequest', async(req, res) =>{
+        app.patch('/userRequest', async (req, res) => {
             const email = req.query.email;
 
-            const filter = { email: email};
+            const filter = { email: email };
 
             const updateDoc = {
                 $set: {
-                  status: `Activated`,
-                  balance: 40
+                    status: `Activated`,
+                    balance: 40
                 },
-              };
+            };
 
-              const result = await usersCollection.updateOne(filter, updateDoc);
+            const result = await usersCollection.updateOne(filter, updateDoc);
 
-              res.send(result);
+            res.send(result);
         })
 
-        app.get('/agentRequest', verifyToken, async(req, res)=>{
-            const query={
+        app.get('/agentRequest', verifyToken, async (req, res) => {
+            const query = {
                 type: 'Agent',
                 status: 'Pending'
             }
@@ -186,22 +186,93 @@ async function run() {
         })
 
 
-        app.patch('/agentRequest', async(req, res) =>{
+        app.patch('/agentRequest', async (req, res) => {
             const email = req.query.email;
 
-            const filter = { email: email};
+            const filter = { email: email };
 
             const updateDoc = {
                 $set: {
-                  status: `Activated`,
-                  balance: 10000
+                    status: `Activated`,
+                    balance: 10000
                 },
-              };
+            };
 
-              const result = await usersCollection.updateOne(filter, updateDoc);
+            const result = await usersCollection.updateOne(filter, updateDoc);
 
-              res.send(result);
+            res.send(result);
         })
+
+
+        app.patch('/sendMoney',verifyToken, async (req, res) => {
+            
+            const sendMoneyInfo = req.body;
+            console.log(sendMoneyInfo);
+
+            const query = {
+                phone: sendMoneyInfo.userNumber
+            };
+
+            const user = await usersCollection.findOne(query);
+            const reduce = sendMoneyInfo.amount > 100 ? sendMoneyInfo.amount + 5 : sendMoneyInfo.amount
+
+            const isPinValid = await bcrypt.compare(sendMoneyInfo.pin, user.pin);
+            if (isPinValid) {
+                const query2 = {
+                    phone: sendMoneyInfo.receiverNumber,
+                    type: 'User',
+                    status: 'Activated'
+                }
+                const isActivatedUser = await usersCollection.findOne(query2);
+
+                if (isActivatedUser) {
+
+                    const filter1 = { phone: sendMoneyInfo.receiverNumber };
+                    const filter2 = { phone: sendMoneyInfo.userNumber };
+
+                    const updateDoc1 = {
+                        $set: {
+                            balance: isActivatedUser.balance + sendMoneyInfo.amount
+                        }
+                    };
+
+                    const updateDoc2 = {
+                        $set: {
+                            balance: user.balance - reduce
+                        }
+                    };
+
+                    const result1 = await usersCollection.updateOne(filter1, updateDoc1);
+                    const result2 = await usersCollection.updateOne(filter2, updateDoc2);
+
+                    return res.send({result1 : result1, result2 : result2})
+
+                }
+                else {
+                    res.send({ message: 'Not valid user for sending money' })
+                }
+
+            }
+            else {
+                return res.send({ pin: false })
+            }
+
+            const filter = { email: email };
+
+            const updateDoc = {
+                $set: {
+                    status: `Activated`,
+                    balance: 10000
+                },
+            };
+
+            const result = await usersCollection.updateOne(filter, updateDoc);
+
+            //   res.send('okk');
+        })
+
+
+
 
 
 
