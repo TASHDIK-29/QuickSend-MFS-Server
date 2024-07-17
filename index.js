@@ -40,6 +40,7 @@ async function run() {
         // await client.connect();
 
         const usersCollection = client.db("QuickSend").collection("user");
+        const usersTransactions = client.db("QuickSend").collection("usersTransactions");
 
         const SECRET_KEY = 'your-secret-key';
 
@@ -204,8 +205,8 @@ async function run() {
         })
 
 
-        app.patch('/sendMoney',verifyToken, async (req, res) => {
-            
+        app.patch('/sendMoney', verifyToken, async (req, res) => {
+
             const sendMoneyInfo = req.body;
             console.log(sendMoneyInfo);
 
@@ -245,11 +246,11 @@ async function run() {
                     const result1 = await usersCollection.updateOne(filter1, updateDoc1);
                     const result2 = await usersCollection.updateOne(filter2, updateDoc2);
 
-                    return res.send({result1 : result1, result2 : result2})
+                    return res.send({ pin: true, receiver: true, result1: result1, result2: result2 })
 
                 }
                 else {
-                    res.send({ message: 'Not valid user for sending money' })
+                    res.send({ pin: true, receiver: false })
                 }
 
             }
@@ -257,18 +258,31 @@ async function run() {
                 return res.send({ pin: false })
             }
 
-            const filter = { email: email };
+        })
 
-            const updateDoc = {
-                $set: {
-                    status: `Activated`,
-                    balance: 10000
-                },
+
+        app.post('/sendMoneyTransaction', async (req, res) => {
+            const transInfo = req.body;
+            console.log(transInfo);
+
+            const query = {
+                phone: transInfo.receiverNumber
             };
 
-            const result = await usersCollection.updateOne(filter, updateDoc);
+            const receiver = await usersCollection.findOne(query);
 
-            //   res.send('okk');
+            const transaction = {
+                senderNumber: transInfo.userNumber,
+                receiverNumber: transInfo.receiverNumber,
+                receiverName: receiver.name,
+                amount : transInfo.amount,
+                type: 'Send Money',
+                date: transInfo.date
+            }
+
+            const result = await usersTransactions.insertOne(transaction);
+
+            res.send(result);
         })
 
 
