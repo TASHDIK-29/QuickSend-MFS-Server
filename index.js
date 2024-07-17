@@ -42,6 +42,7 @@ async function run() {
         const usersCollection = client.db("QuickSend").collection("user");
         const usersTransactions = client.db("QuickSend").collection("usersTransactions");
         const cashInRequests = client.db("QuickSend").collection("cashInRequests");
+        const cashOutRequests = client.db("QuickSend").collection("cashOutRequests");
 
         const SECRET_KEY = 'your-secret-key';
 
@@ -287,7 +288,7 @@ async function run() {
         })
 
 
-        app.post('/cashInRequest', async (req, res) => {
+        app.post('/cashInRequest', verifyToken, async (req, res) => {
             const cashInfo = req.body;
             console.log(cashInfo);
 
@@ -394,9 +395,122 @@ async function run() {
                 return res.send({ balance: false })
             }
 
-            // res.send('okk')
 
         })
+
+
+
+        app.post('/cashOutRequest', verifyToken, async (req, res) => {
+            const cashInfo = req.body;
+            console.log(cashInfo);
+
+
+            const query = {
+                phone: cashInfo.userNumber
+            };
+
+            const user = await usersCollection.findOne(query);
+
+            const isPinValid = await bcrypt.compare(cashInfo.pin, user.pin);
+
+            if (isPinValid) {
+                const query2 = {
+                    phone: cashInfo.agentNumber,
+                    type: 'Agent',
+                    status: 'Activated'
+                }
+                const isActivatedAgent = await usersCollection.findOne(query2);
+
+                if (isActivatedAgent) {
+                    const cashOut = {
+                        senderNumber: cashInfo.userNumber,
+                        agentNumber: cashInfo.agentNumber,
+                        amount: cashInfo.amount,
+                        date: new Date().toLocaleString()
+                    }
+
+                    const result = await cashOutRequests.insertOne(cashOut);
+
+                    return res.send(result);
+                }
+                else {
+                    return res.send({ pin: true, agent: false })
+                }
+            }
+
+            res.send({ pin: false });
+
+        })
+
+
+        app.get('/cashOutRequest', verifyToken, async (req, res) => {
+            const agentNumber = req.query.agentNumber;
+            // console.log('agentNumber=', agentNumber);
+            const query = {
+                agentNumber: agentNumber
+            }
+
+            const requests = await cashOutRequests.find(query).toArray();
+
+            res.send(requests);
+        })
+
+
+        app.patch('/cashOutAccept', verifyToken, async (req, res) => {
+            const id = req.query.id;
+            console.log('id', id);
+
+            const filter = { _id: new ObjectId(id) };
+            const doc = await cashOutRequests.findOne(filter);
+
+            const query1 = { phone: doc.agentNumber };
+            const agent = await usersCollection.findOne(query1);
+            const query2 = { phone: doc.senderNumber };
+            const sender = await usersCollection.findOne(query2);
+
+            if (agent.balance >= doc.amount) {
+
+                const updateDoc1 = {
+                    $set: {
+                        balance: agent.balance + doc.amount + (doc.amount*.015)
+                    }
+                };
+
+                const updateDoc2 = {
+                    $set: {
+                        balance: sender.balance - doc.amount - (doc.amount*.015)
+                    }
+                };
+
+                const result1 = await usersCollection.updateOne(query1, updateDoc1);
+                const result2 = await usersCollection.updateOne(query2, updateDoc2);
+
+
+                const request = await cashOutRequests.deleteOne(filter);
+
+
+                const transaction = {
+                    senderNumber: doc.senderNumber,
+                    receiverNumber: doc.agentNumber,
+                    receiverName: agent.name,
+                    amount: doc.amount,
+                    type: 'Cash Out',
+                    date: new Date().toLocaleString()
+                }
+
+                const result = await usersTransactions.insertOne(transaction);
+
+
+                return res.send({ result1, result2, request, balance: true });
+
+            }
+            else {
+                return res.send({ balance: false })
+            }
+
+
+        })
+
 
 
 
