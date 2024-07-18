@@ -115,7 +115,7 @@ async function run() {
                     console.log('User exists:', user);
 
                     const token = jwt.sign({ email: user.email }, SECRET_KEY, { expiresIn: '1h' });
-                    res.json({ token });
+                    res.json({ token, type: user.type });
 
 
                     // return res.send({ user: true, pin: true, type: user.type });
@@ -472,13 +472,13 @@ async function run() {
 
                 const updateDoc1 = {
                     $set: {
-                        balance: agent.balance + doc.amount + (doc.amount*.015)
+                        balance: agent.balance + doc.amount + (doc.amount * .015)
                     }
                 };
 
                 const updateDoc2 = {
                     $set: {
-                        balance: sender.balance - doc.amount - (doc.amount*.015)
+                        balance: sender.balance - doc.amount - (doc.amount * .015)
                     }
                 };
 
@@ -509,6 +509,34 @@ async function run() {
             }
 
 
+        })
+
+
+
+        app.get('/balance', verifyToken, async (req, res) => {
+            const pin = req.query.pin;
+            const credential = req.query.credential;
+
+            console.log({ pin, credential });
+
+            const query = {
+                $or: [
+                    { email: credential },
+                    { phone: credential }
+                ]
+            };
+
+            const user = await usersCollection.findOne(query);
+
+            const isPinValid = await bcrypt.compare(pin, user.pin);
+
+            if(isPinValid){
+                return res.send({balance: user.balance, pin: true})
+            }
+
+
+
+            res.send({pin: false})
         })
 
 
